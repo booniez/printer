@@ -14,3 +14,10 @@ mvn clean install
 ```shell
 docker-compose -f docker-compose-printer.yml up -d --b
 ```
+
+
+### 常见问题
+
+1. 如果找不到打印机，怎么办？
+
+部署在能访问到打印机的主机即可 ``java -Djava.security.egd=file:/dev/./urandom -jar ./printer/printer-0.0.1.jar``

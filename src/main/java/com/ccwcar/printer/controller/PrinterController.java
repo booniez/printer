@@ -9,10 +9,11 @@ import javax.print.*;
 import javax.print.attribute.HashPrintRequestAttributeSet;
 import javax.print.attribute.PrintRequestAttributeSet;
 import javax.print.attribute.standard.*;
+import javax.print.event.PrintJobAdapter;
+import javax.print.event.PrintJobEvent;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
 
 @RestController
 @RequestMapping("printer")
@@ -30,13 +31,10 @@ public class PrinterController {
 
     @PostMapping("batch")
     public R print(@RequestBody PrinterReqVo reqVo) {
-        List<String> printerName = new ArrayList<>();
         PrintService[] printServices = PrintServiceLookup.lookupPrintServices(null, null);
         PrintService myPrinter = null;
         for (PrintService printService : printServices) {
-            String serviceName = printService.getName();
-            printerName.add(serviceName);
-            if (reqVo.getName().equals(serviceName)) {
+            if (reqVo.getName().equals(printService.getName())) {
                 myPrinter = printService;
                 break;
             }
@@ -47,30 +45,69 @@ public class PrinterController {
         }
 
         DocFlavor flavor = DocFlavor.INPUT_STREAM.AUTOSENSE;
-        DocPrintJob printJob = myPrinter.createPrintJob();
         PrintRequestAttributeSet attrSet = new HashPrintRequestAttributeSet();
         attrSet.add(MediaSizeName.ISO_A4); // 设置纸张大小为A4
-        attrSet.add(Chromaticity.COLOR); // 设置为彩色打印
+//        attrSet.add(Chromaticity.COLOR); // 设置为彩色打印
 //        attrSet.add(PrintQuality.HIGH); // 设置为高质量打印
         attrSet.add(OrientationRequested.PORTRAIT); // 设置为纵向打印
-        attrSet.add(new Copies(1)); // 设置打印2份
-        attrSet.add(Sides.TWO_SIDED_LONG_EDGE); // 设置双面打印（长边装订）
-        List<String> failedResource = new ArrayList<>();
-        List<String> successResource = new ArrayList<>();
+        attrSet.add(new Copies(1)); // 设置打印1份
+        attrSet.add(Sides.ONE_SIDED); // 设置单面打印
+
+        Set<String> failedResource = new HashSet<>();
+        Set<String> successResource = new HashSet<>();
+        Set<String> transferCompletedResource = new HashSet<>();
+
         for (String urlString : reqVo.getResource()) {
+            System.out.println("print --->" + urlString);
+            DocPrintJob printJob = myPrinter.createPrintJob();
+            CountDownLatch latch = new CountDownLatch(1);
+            printJob.addPrintJobListener(new PrintJobAdapter() {
+                @Override
+                public void printJobCompleted(PrintJobEvent pje) {
+                    System.out.println("print success --->" + urlString);
+                    successResource.add(urlString);
+                    latch.countDown();
+                }
+
+                @Override
+                public void printJobFailed(PrintJobEvent pje) {
+                    System.out.println("print failed --->" + urlString);
+                    failedResource.add(urlString);
+                    latch.countDown();
+                }
+
+                @Override
+                public void printDataTransferCompleted(PrintJobEvent pje) {
+                    System.out.println("Data transfer completed for --->" + urlString);
+                    transferCompletedResource.add(urlString);
+                    latch.countDown();
+                }
+
+                @Override
+                public void printJobNoMoreEvents(PrintJobEvent pje) {
+                    System.out.println("No more events to be delivered for --->" + urlString);
+                    // 这可能表示打印作业已经完成或失败，但没有触发相应事件
+                    latch.countDown();
+                }
+
+            });
+
             try {
                 InputStream is = DownloadUtil.download(urlString);
                 Doc doc = new SimpleDoc(is, flavor, null);
-                printJob.print(doc, attrSet); // 打印文件
-                is.close(); // 关闭文件输入流
-                successResource.add(urlString);
+                printJob.print(doc, attrSet);
+                is.close();
+                latch.await(); // 等待直到当前打印任务的监听器减少Latch计数
             } catch (Exception e) {
+                e.printStackTrace();
                 failedResource.add(urlString);
             }
         }
+
         HashMap<String, Object> resultMap = new HashMap<>();
         resultMap.put("failedResource", failedResource);
         resultMap.put("successResource", successResource);
+        resultMap.put("transferCompletedResource", transferCompletedResource);
         return R.ok().setMsg("打印队列创建成功").setData(resultMap);
     }
 }

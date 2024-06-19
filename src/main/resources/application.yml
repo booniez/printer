@@ -4,6 +4,7 @@ server:
   port: 8071
   servlet:
     context-path: /api
+  address: 0.0.0.0
 
 spring:
   application:

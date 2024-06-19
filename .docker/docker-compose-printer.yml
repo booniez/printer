@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+
+  printer-api:
+    build: ./printer
+    image: ccw/ccw-printer-api
+    ports:
+      - "8071:8071"
+    logging:
+      options:
+        max-size: "1g"
+    restart: always

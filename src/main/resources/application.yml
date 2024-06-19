@@ -1,0 +1,10 @@
+#spring.application.name=printer
+
+server:
+  port: 8071
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: printer

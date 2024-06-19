@@ -1,7 +1,6 @@
 version: '3'
 
 services:
-
   printer-api:
     build: ./printer
     image: ccw/ccw-printer-api
@@ -11,3 +10,4 @@ services:
       options:
         max-size: "1g"
     restart: always
+    network_mode: bridge # 如果打印机和容器在同一网络下，使用宿主网络可能是最简单的方法
